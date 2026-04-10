@@ -7,6 +7,12 @@ interface AnimatedNoiseProps {
   className?: string
 }
 
+// Fixed small canvas size — browser GPU will scale it up via CSS.
+// At 3% opacity with overlay blend mode the upscaling is imperceptible.
+const NOISE_SIZE = 200    // 200×200 px canvas (vs ~720×450 before = 8× fewer pixels)
+const FRAME_COUNT = 12    // pre-generated frames to cycle through
+const TARGET_FPS = 12     // 12 fps is plenty for film grain
+
 export function AnimatedNoise({ opacity = 0.05, className }: AnimatedNoiseProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -14,49 +20,49 @@ export function AnimatedNoise({ opacity = 0.05, className }: AnimatedNoiseProps)
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const ctx = canvas.getContext("2d")
+    // alpha: false — slight perf win, we don't need transparency on the canvas itself
+    const ctx = canvas.getContext("2d", { alpha: false })
     if (!ctx) return
 
+    canvas.width = NOISE_SIZE
+    canvas.height = NOISE_SIZE
+
+    // ─── Pre-generate all frames ONCE at mount ───────────────────────────────
+    // Math.random() is never called again after this point.
+    // Total cost: 200×200×12 = 480 000 iterations — happens once, not per frame.
+    const frames: ImageData[] = Array.from({ length: FRAME_COUNT }, () => {
+      const imageData = ctx.createImageData(NOISE_SIZE, NOISE_SIZE)
+      // Uint32Array view lets us write R+G+B+A in one operation (4× faster than byte-by-byte)
+      const buf = new Uint32Array(imageData.data.buffer)
+      for (let i = 0; i < buf.length; i++) {
+        const v = (Math.random() * 255) | 0
+        // Canvas pixel layout in memory (little-endian): R G B A
+        // As a Uint32: 0xAA_BB_GG_RR  →  alpha=0xff, blue=v, green=v, red=v
+        buf[i] = (0xff << 24) | (v << 16) | (v << 8) | v
+      }
+      return imageData
+    })
+
+    // Draw first frame immediately so there's no blank flash
+    ctx.putImageData(frames[0], 0, 0)
+
+    // ─── Animation loop — zero CPU math, just a memory copy at 12 fps ────────
     let animationId: number
-    let frame = 0
+    let frameIndex = 0
+    let lastTime = 0
+    const interval = 1000 / TARGET_FPS
 
-    const resize = () => {
-      canvas.width = canvas.offsetWidth / 2
-      canvas.height = canvas.offsetHeight / 2
-    }
-
-    const generateNoise = () => {
-      const imageData = ctx.createImageData(canvas.width, canvas.height)
-      const data = imageData.data
-
-      for (let i = 0; i < data.length; i += 4) {
-        const value = Math.random() * 255
-        data[i] = value // R
-        data[i + 1] = value // G
-        data[i + 2] = value // B
-        data[i + 3] = 255 // A
-      }
-
-      ctx.putImageData(imageData, 0, 0)
-    }
-
-    const animate = () => {
-      frame++
-      // Update noise every 2 frames for performance while still looking animated
-      if (frame % 2 === 0) {
-        generateNoise()
-      }
+    const animate = (time: number) => {
       animationId = requestAnimationFrame(animate)
+      if (time - lastTime < interval) return   // skip frame — haven't hit target fps yet
+      lastTime = time
+      frameIndex = (frameIndex + 1) % FRAME_COUNT
+      ctx.putImageData(frames[frameIndex], 0, 0)
     }
 
-    resize()
-    window.addEventListener("resize", resize)
-    animate()
+    animationId = requestAnimationFrame(animate)
 
-    return () => {
-      window.removeEventListener("resize", resize)
-      cancelAnimationFrame(animationId)
-    }
+    return () => cancelAnimationFrame(animationId)
   }, [])
 
   return (
@@ -71,6 +77,8 @@ export function AnimatedNoise({ opacity = 0.05, className }: AnimatedNoiseProps)
         pointerEvents: "none",
         opacity,
         mixBlendMode: "overlay",
+        // "auto" = bilinear scaling by GPU — soft grain, invisible at 3% opacity
+        imageRendering: "auto",
       }}
     />
   )
