@@ -5,6 +5,8 @@ import { useEffect, useRef } from "react"
 interface AnimatedNoiseProps {
   opacity?: number
   className?: string
+  fadeBottom?: boolean // плавное растворение снизу
+  fadeStart?: number  // с какого % высоты начинается fade (0–100), по умолчанию 55
 }
 
 // Fixed small canvas size — browser GPU will scale it up via CSS.
@@ -13,7 +15,12 @@ const NOISE_SIZE = 200    // 200×200 px canvas (vs ~720×450 before = 8× fewer
 const FRAME_COUNT = 12    // pre-generated frames to cycle through
 const TARGET_FPS = 12     // 12 fps is plenty for film grain
 
-export function AnimatedNoise({ opacity = 0.05, className }: AnimatedNoiseProps) {
+export function AnimatedNoise({
+  opacity = 0.05,
+  className,
+  fadeBottom = false,
+  fadeStart = 55,
+}: AnimatedNoiseProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -65,6 +72,11 @@ export function AnimatedNoise({ opacity = 0.05, className }: AnimatedNoiseProps)
     return () => cancelAnimationFrame(animationId)
   }, [])
 
+  // Градиент маски: шум полностью виден сверху, плавно тает к низу
+  const maskValue = fadeBottom
+    ? `linear-gradient(to bottom, black ${fadeStart}%, transparent 100%)`
+    : undefined
+
   return (
     <canvas
       ref={canvasRef}
@@ -79,6 +91,9 @@ export function AnimatedNoise({ opacity = 0.05, className }: AnimatedNoiseProps)
         mixBlendMode: "overlay",
         // "auto" = bilinear scaling by GPU — soft grain, invisible at 3% opacity
         imageRendering: "auto",
+        // Плавное растворение снизу через CSS mask
+        WebkitMaskImage: maskValue,
+        maskImage: maskValue,
       }}
     />
   )
