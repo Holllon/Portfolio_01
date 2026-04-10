@@ -21,4 +21,6 @@ jobs:
             git pull origin main
             npm install
             npm run build
-            pm2 reload all
+            pm2 reload uxprod || pm2 start npm --name "uxprod" -- start
+
+# Triggering deploy with new key
