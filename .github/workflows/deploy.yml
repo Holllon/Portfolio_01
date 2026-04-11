@@ -19,7 +19,7 @@ jobs:
           script: |
             cd /home/keller999/nextjs-app
             git pull origin main
-            npm install
+            npm install --legacy-peer-deps
             npm run build
             pm2 reload uxprod || pm2 start npm --name "uxprod" -- start
 
