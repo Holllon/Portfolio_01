@@ -36,15 +36,6 @@ const principles = [
     description: "Balance between restraint and expression. Confidence without excess.",
     align: "left",
   },
-  {
-    number: "04",
-    titleParts: [
-      { text: "SIGNAL ", highlight: false },
-      { text: "CLARITY", highlight: true },
-    ],
-    description: "Communication that cuts through noise. Precision in every interaction.",
-    align: "right",
-  },
 ]
 
 export function PrinciplesSection() {
